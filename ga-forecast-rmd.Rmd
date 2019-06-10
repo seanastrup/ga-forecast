@@ -1,0 +1,143 @@
+---
+title: "Google Analytics Forecast"
+date: "`r Sys.Date()`"
+runtime: shiny
+output: rmdformats::readthedown
+---
+
+```{r echo=FALSE}
+suppressMessages({
+  library(tidyverse)
+  library(ggfortify)
+  library(googleAnalyticsR)
+  library(googleAuthR)
+  library(highcharter)
+  library(forecast)
+  library(stats)
+})
+source('r-sources/ga-auth.R')
+DEPLOYMENT_TAG <- 'development'
+```
+
+
+```{r echo=FALSE}
+
+```
+
+## [Reload Page](http://shiny.seanastrup.com/p/4246/ga-forecast-rmd.Rmd)
+
+# Chose Inputs
+```{r Authenticate and choose viewId, echo=FALSE}
+googleAuthUI("login")
+authDropdownUI("auth_menu")
+token  <- callModule(googleAuth, "login")
+
+googleAccounts <- reactive({
+    validate(
+      need(token(), "Authenticate")
+    )
+    
+    with_shiny(google_analytics_account_list, shiny_access_token = token())
+  })
+selectedViewId <- callModule(authDropdown, "auth_menu", ga.table = googleAccounts)
+
+# shiny::inputPanel({
+  shiny::selectInput(inputId = 'modelSelection', label = 'Forecast Type', 
+                     choices = c('ARIMA', 'Holt-Winters'), selected = 1)
+  shiny::radioButtons(inputId = 'forecastLength', 
+                      label = 'Forecast Length (days)', inline = TRUE,
+                      choices = c(7, 14, 30, 60, 90), selected = 14) 
+  
+# })
+```
+
+
+
+```{r echo=FALSE}
+get_daily_sessions <- reactive({
+  req(selectedViewId())
+  
+  selectedViewId <- selectedViewId()
+  
+  if(DEPLOYMENT_TAG == 'development'){
+    date <- seq(from = as.Date(lubridate::today() - 120), 
+                to = lubridate::today() - 1, by = 'day')
+    sessions <- rnorm(120, mean = 10000, sd = 2000)
+    
+    dates <- data.frame(date = date, sessions = sessions) %>% 
+      mutate(sessions = ifelse(weekdays(date) %in% c('Saturday', 'Sunday'), 
+                               sessions * .7, 
+                               ifelse(weekdays(date) == 'Monday', 
+                                sessions * .9, 
+                                  ifelse(weekdays(date) == 'Tuesday', 
+                                  sessions * 1.1, 
+                                    ifelse(weekdays(date) == 'Wednesday', 
+                                    sessions * 1.25, 
+                                      ifelse(weekdays(date) == 'Thursday', 
+                                      sessions * 1.3, 
+                                      sessions)
+                                    )
+                                  )
+                                )
+                               ), 
+             number = 1, 
+             increment = cumsum(number) * .01, 
+             sessions = (increment + 1) * sessions)
+    return(list(dailySessions = dates, dates = dates$date))
+  } else {
+    with_shiny(google_analytics, viewId = selectedViewId, 
+               date_range = c(lubridate::today() - 120, lubridate::today()), 
+               metrics = c('sessions'), dimensions = c('date'), 
+               shiny_access_token = token())
+  }
+})
+
+make_sessions_ts <- reactive({
+  req(get_daily_sessions())
+    
+  dailySessions <- get_daily_sessions()$dailySessions
+  dailySessionsTs <- stats::ts(dailySessions$sessions, frequency = 7)
+  
+  return(dailySessionsTs)
+})
+```
+
+```{r echo=FALSE}
+highcharter::renderHighchart({
+  req(make_sessions_ts())
+
+  dailySessionsTs <- make_sessions_ts()
+  dates <- get_daily_sessions()$dates
+  forecastLength <- as.numeric(input$forecastLength)
+
+  # auto.arima vs Holtwinters?
+  # who cares right now though fr
+  if (input$modelSelection == 'ARIMA'){
+    preds <- forecast::auto.arima(dailySessionsTs)
+  } else if (input$modelSelection == 'Holt-Winters'){
+    preds <- stats::HoltWinters(dailySessionsTs)
+  }
+  
+  forecast <- fortify(forecast::forecast(preds, h = forecastLength))
+
+  forecastDates <- seq(max(dates) + 1, max(dates) + forecastLength, by = 'day')
+  dateCol <- c(dates, forecastDates)
+
+  forecast$dates <- dateCol
+
+  highchart(type = 'stock') %>%
+    hc_add_series(forecast, 'spline', hcaes(x = dates,
+                                                 y = Data),
+                  name = 'Original') %>%
+    hc_add_series(forecast, 'spline', hcaes(x = dates,
+                                                 y = `Point Forecast`),
+                  name = 'Forecast') %>%
+    hc_add_series(forecast, 'arearange', hcaes(x = dates,
+                                                    low = `Lo 80`,
+                                                    high = `Hi 80`),
+                  name = 'Range') %>%
+    hc_exporting(enabled = TRUE)
+
+})
+```
+

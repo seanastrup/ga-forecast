@@ -41,14 +41,12 @@ googleAccounts <- reactive({
   })
 selectedViewId <- callModule(authDropdown, "auth_menu", ga.table = googleAccounts)
 
-# shiny::inputPanel({
-  shiny::selectInput(inputId = 'modelSelection', label = 'Forecast Type', 
-                     choices = c('ARIMA', 'Holt-Winters'), selected = 1)
-  shiny::radioButtons(inputId = 'forecastLength', 
-                      label = 'Forecast Length (days)', inline = TRUE,
-                      choices = c(7, 14, 30, 60, 90), selected = 14) 
+shiny::selectInput(inputId = 'modelSelection', label = 'Forecast Type', 
+                   choices = c('ARIMA', 'Holt-Winters'), selected = 1)
+shiny::radioButtons(inputId = 'forecastLength', 
+                    label = 'Forecast Length (days)', inline = TRUE,
+                    choices = c(7, 14, 30, 60, 90), selected = 14) 
   
-# })
 ```
 
 

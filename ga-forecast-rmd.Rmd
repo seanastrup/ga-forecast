@@ -79,7 +79,7 @@ get_daily_sessions <- reactive({
                                 )
                                ), 
              number = 1, 
-             increment = cumsum(number) * .01, 
+             increment = cumsum(number) * .019, 
              sessions = (increment + 1) * sessions)
     return(list(dailySessions = dates, dates = dates$date))
   } else {

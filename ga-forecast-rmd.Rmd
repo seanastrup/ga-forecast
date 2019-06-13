@@ -1,8 +1,11 @@
 ---
 title: "Google Analytics Forecast"
 date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown:
+    includes:
+      in_header: www/css_spinner.html
 runtime: shiny
-output: rmdformats::readthedown
 ---
 
 ```{r echo=FALSE}
@@ -14,6 +17,7 @@ suppressMessages({
   library(highcharter)
   library(forecast)
   library(stats)
+  library(shinycssloaders)
 })
 source('r-sources/ga-auth.R')
 DEPLOYMENT_TAG <- 'development'
@@ -101,7 +105,10 @@ make_sessions_ts <- reactive({
 ```
 
 ```{r echo=FALSE}
-highcharter::renderHighchart({
+highcharter::highchartOutput('forecast') %>% shinycssloaders::withSpinner(type = 1)
+
+
+output$forecast <- highcharter::renderHighchart({
   req(make_sessions_ts())
 
   dailySessionsTs <- make_sessions_ts()
@@ -136,6 +143,6 @@ highcharter::renderHighchart({
                   name = 'Range') %>%
     hc_exporting(enabled = TRUE)
 
-})
+}) 
 ```
 
